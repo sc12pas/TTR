@@ -22,13 +22,13 @@ class Point:
 
 class BoardSpace:
 	def __init__(self,posU,posD,piece,x1,y1,x2,y2):
-		self.posU = {}
-		self.posD = {}
-		self.piece = 0
-		self.x1 = 0
-		self.y1 = 0
-		self.x2 = 0
-		self.y2 = 0
+		self.posU = posU
+		self.posD = posD
+		self.piece = piece
+		self.x1 = x1
+		self.y1 = y1
+		self.x2 = x2
+		self.y2 = y2
 
 
 
@@ -44,8 +44,11 @@ right_camera.resolution = (640,400)
 right_camera.open()
 right_image = None
 board_spaces = []
-
+current_space = 0
+next_space = 0
 current_piece = 0
+direction = "up"
+gameLoss = False
 
 
 #------------------------Defining all of the board spaces-------------------#
@@ -139,15 +142,17 @@ right_sub = rospy.Subscriber( 'cameras/right_hand_camera/image', Image, get_righ
 #--------------------------Functions for everything needed to play the game-----#
 
 
-def place(space):
+def place(num):
 	global current_piece
 	global current_space
+	global board_spaces
+	space = board_spaces[num]
 	limbL.move_to_joint_positions(coords.ResetPos)
 	limbL.move_to_joint_positions(space.posU)
 	limbL.move_to_joint_positions(space.posD)
 	gripper.open()
 	space.piece = current_piece
-	current_space = space
+	current_space = num
 	limbL.move_to_joint_positions(space.posU)
 	limbL.move_to_joint_positions(coords.ResetPos)
 
@@ -169,23 +174,120 @@ def move_to(bs):
 	limbL.move_to_joint_positions(bs.posD)
 
 def pickUp():
-	limbL.move_to_joint_positions(coords.ResetPos)
+	#limbL.move_to_joint_positions(coords.ResetPos)
 	limbL.move_to_joint_positions(coords.PickU)
 	limbL.move_to_joint_positions(coords.PickD)
+	current_piece = IDBlock(left_image)
 	gripper.close()
 	rospy.sleep(2)
 	limbL.move_to_joint_positions(coords.PickU)
 	limbL.move_to_joint_positions(coords.ResetPos)
 
+def rotate():
+	limbL.move_to_joint_positions(coords.PickU)
+	limbL.move_to_joint_positions(coords.rotateU)
+	limbL.move_to_joint_positions(coords.rotateD)
+	gripper.open()
+	rospy.sleep(2)
+	limbL.move_to_joint_positions(coords.rotateU)
+	pickUp()
+
+def nextSpace(tile):
+	global current_space
+	global current_piece
+	global next_space
+	global direction
+	
+	current_piece = tile
+
+	if direction == "up":
+		if current_piece == 1:
+			next_space = current_space - 5
+			if next_space <= -1:
+				next_space = 66
+		elif current_piece == 2:
+			if current_space == 4 or 9 or 14:
+				next_space = 66
+			else:
+				next_space = current_space + 1
+				direction == "right"
+		elif current_piece == 3:
+			if current_space == 0 or 5 or 10:
+				next_space = 66
+			else:
+				next_space = current_space - 1
+				direction = "left"
+	elif direction == "down":
+		if current_piece == 1:
+			next_space = current_space + 5
+			if next_space >= 20:
+				next_space = 66
+		elif current_piece == 2:
+			if current_space == 5 or 10 or 15:
+				next_space = 66
+			else:
+				next_space = current_space - 1
+				direction == "left"
+		elif current_piece == 3:
+			if current_space == 9 or 14 or 19:
+				next_space = 66
+			else:
+				next_space = current_space + 1
+				direction = "right"
+
+	elif direction == "right":
+		if current_piece == 1:
+			if current_space == 4 or 9 or 14 or 19:
+				next_space = 66
+			else:
+				next_space = current_space + 1
+		elif current_piece == 2:
+			if 1 <= current_space <= 4:
+				next_space = 66
+			else:
+				next_space = current_space - 5
+				direction == "up"
+		elif current_piece == 3:
+			if 16 <= current_space <= 19:
+				next_space = 66
+			else:
+				next_space = current_space + 5
+				direction = "down"
+
+	elif direction == "left":
+		if current_piece == 1:
+			if current_space == 0 or 5 or 10 or 15:
+				next_space = 66
+			else:
+				next_space = current_space - 1
+		elif current_piece == 2:
+			next_space = current_space + 5
+			if next_space >= 20:
+				next_space = 66
+			else:
+				direction == "down"
+		elif current_piece == 3:
+			next_space = current_space - 5
+			if next_space <= -1:
+				next_space = 66
+			direction == "up"
+
+	else:
+		print "+++?????+++ Out of Cheese Error. Redo From Start"
+
+	return next_space
+	
+
 def scanBoard():
 	global board_spaces
 	limbR.move_to_joint_positions(coords.ortho_view)
 	board = right_image
+	thresh, bd = cv2.threshold(board, 127,255,cv2.THRESH_BINARY)
 	for i in range(len(board_spaces)):
 		if board_spaces[i].piece == 0:
 			bs = board_spaces[i]
-			space = board[bs.y1:bs.y2, bs.x1:bs.x2]
-			if cv2.mean(space) >= 0.15:
+			space = bd[bs.y1:bs.y2, bs.x1:bs.x2]
+			if np.mean(space) >= 0.2:
 				limbR.move_to_joint_positions(coords.tuck_right)
 				move_to(bs)
 				bs.piece = IDBlock(left_image)
@@ -193,12 +295,13 @@ def scanBoard():
 	limbR.move_to_joint_positions(coords.tuck_right)
 
 def turnOne():
+	gripper.calibrate()
 	limbR.move_to_joint_positions(coords.tuck_right)
 	limbL.move_to_joint_positions(coords.ResetPos)
 	startTurn()
 	pickUp()
-	place(board_spaces[17])
-	current_space = board_spaces[12]
+	place(17)
+	next_space = 12
 
 def IDBlock(img):
 	cv2.imwrite('imgbase.jpg',img)
@@ -218,6 +321,8 @@ def IDBlock(img):
 	cv2.drawContours(im,my_contours,-1,(255,0,0),-1)
 	if(len(my_contours)==1):
 		tile_type = 1
+	elif(len(my_contours)==0):
+		tile_type = 0
 	else:
 		centres = []
 		for i in range(len(my_contours)):
@@ -233,22 +338,79 @@ def IDBlock(img):
 		elif (centres[1].x > centres[0].x) and (centres[1].y > centres[0].y):
 			tile_type = 2
 		else: tile_type = 3
-	#cv2.imwrite('img_o.jpg',imgray)
-	cv2.imwrite('img.jpg',im)
-	cv2.imwrite('img0.jpg', img)
-	#cv2.imshow('img',im)
-	#cv2.waitKey(0)
-	#cv2.destroyAllWindows()
 	print tile_type
 	return tile_type
 
 while left_image==None:
 	pass
 
-limbL.move_to_joint_positions(coords.B5U)
-limbL.move_to_joint_positions(coords.B5D)
+turnOne()
 
-IDBlock(left_image)
+while gameLoss == False:
+	startTurn()
+	current_space = next_space
+	while board_spaces[current_space].piece != 0:
+		current_space = nextSpace(board_spaces[current_space].piece)
+	pickUp()
+	if current_piece == 1:
+		place(board_spaces[current_space])
+		next = nextSpace(current_piece)
+		if next == 66
+			gameLoss = True
+	elif current_piece == 2:
+		next = nextSpace(current_piece)
+		altnext = nextSpace(3)
+		if current_space == 6 or 7 or 8 or 11 or 12 or 13:
+			if next == 6 or 7 or 8 or 11 or 12 or 13:
+				place(board_spaces[current_space])
+			elif altnext == 6 or 7 or 8 or 11 or 12 or 13:
+				rotate()
+				place(board_spaces[current_space])
+
+		if next == 66:
+			if altnext == 66:
+				gameLoss = True
+			else:			
+				rotate()
+				place(board_spaces[current_space])
+		elif next == 6 or 7 or 8 or 11 or 12 or 13:
+			place(board_spaces[current_space])
+		elif altnext == 6 or 7 or 8 or 11 or 12 or 13:
+			rotate()
+			place(board_spaces[current_space])
+		else:
+			place(board_spaces[current_space])
+
+	elif current_piece == 3:
+		next = nextSpace(current_piece)
+		altnext = nextSpace(2)
+		if current_space == 6 or 7 or 8 or 11 or 12 or 13:
+			if next == 6 or 7 or 8 or 11 or 12 or 13:
+				place(board_spaces[current_space])
+			elif altnext == 6 or 7 or 8 or 11 or 12 or 13:
+				rotate()
+				place(board_spaces[current_space])
+
+		if next == 66:
+			if altnext == 66:
+				gameLoss = True
+			else:			
+				rotate()
+				place(board_spaces[current_space])
+		elif next == 6 or 7 or 8 or 11 or 12 or 13:
+			place(board_spaces[current_space])
+		elif altnext == 6 or 7 or 8 or 11 or 12 or 13:
+			rotate()
+			place(board_spaces[current_space])
+		else:
+			place(board_spaces[current_space])
+
+if gameLoss == True:
+	print "+++Divide By Cucumber Error. Please Reinstall Universe And Reboot+++
+	sys.exit()
+
+		
+		 
 
 
 
