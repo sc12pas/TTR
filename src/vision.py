@@ -5,7 +5,6 @@ import cv_bridge
 import time
 import sys
 import baxter_interface as bax
-from matplotlib import pyplot as plt
 
 import coords
 
@@ -47,23 +46,23 @@ board_spaces = []
 current_space = 0
 next_space = 0
 current_piece = 0
-direction = "up"
+direction = ""
 gameLoss = False
 
 
 #------------------------Defining all of the board spaces-------------------#
 
-h1=210
-h2=270
-h3=330
-h4=390
-h5=460
-h6=520
-v1=51
+h1=195
+h2=260
+h3=335
+h4=400
+h5=470
+h6=535
+v1=44
 v2=113
 v3=174
-v4=238
-v5=305
+v4=250
+v5=315
 
 A1 = BoardSpace(coords.A1U, coords.A1D, 0, h1,v1,h2,v2)
 board_spaces.append(A1)
@@ -166,12 +165,19 @@ def startTurn():
 		current_piece = IDBlock(left_image)
 		rospy.sleep(5)
 	limbL.move_to_joint_positions(coords.PickU)
+	limbL.move_to_joint_positions(coords.ResetPos)
 	scanBoard()
+	limbL.move_to_joint_positions(coords.ResetPos)
 
 def move_to(bs):
 	limbL.move_to_joint_positions(coords.ResetPos)
 	limbL.move_to_joint_positions(bs.posU)
 	limbL.move_to_joint_positions(bs.posD)
+
+def move_from(bs):
+	limbL.move_to_joint_positions(bs.posU)
+	limbL.move_to_joint_positions(coords.ResetPos)
+
 
 def pickUp():
 	#limbL.move_to_joint_positions(coords.ResetPos)
@@ -192,62 +198,64 @@ def rotate():
 	limbL.move_to_joint_positions(coords.rotateU)
 	pickUp()
 
-def nextSpace(tile):
+def nextSpace(piece):
 	global current_space
 	global current_piece
 	global next_space
 	global direction
-	
-	current_piece = tile
+
 
 	if direction == "up":
-		if current_piece == 1:
+		print "piece = ", piece
+		if piece == 1:
 			next_space = current_space - 5
 			if next_space <= -1:
 				next_space = 66
-		elif current_piece == 2:
-			if current_space == 4 or 9 or 14:
+		elif piece == 2:
+			if current_space == (4 or 9 or 14):
+				print "ho ho, ha ha", current_space
 				next_space = 66
 			else:
 				next_space = current_space + 1
-				direction == "right"
-		elif current_piece == 3:
-			if current_space == 0 or 5 or 10:
+				direction = "right"
+		elif piece == 3:
+			if current_space == (0 or 5 or 10):
+				print "You got PEEP'D!", current_space
 				next_space = 66
 			else:
 				next_space = current_space - 1
 				direction = "left"
 	elif direction == "down":
-		if current_piece == 1:
+		if piece == 1:
 			next_space = current_space + 5
 			if next_space >= 20:
 				next_space = 66
-		elif current_piece == 2:
-			if current_space == 5 or 10 or 15:
+		elif piece == 2:
+			if current_space == (5 or 10 or 15):
 				next_space = 66
 			else:
 				next_space = current_space - 1
-				direction == "left"
-		elif current_piece == 3:
-			if current_space == 9 or 14 or 19:
+				direction = "left"
+		elif piece == 3:
+			if current_space == (9 or 14 or 19):
 				next_space = 66
 			else:
 				next_space = current_space + 1
 				direction = "right"
 
 	elif direction == "right":
-		if current_piece == 1:
-			if current_space == 4 or 9 or 14 or 19:
+		if piece == 1:
+			if current_space == (4 or 9 or 14 or 19):
 				next_space = 66
 			else:
 				next_space = current_space + 1
-		elif current_piece == 2:
+		elif piece == 2:
 			if 1 <= current_space <= 4:
 				next_space = 66
 			else:
 				next_space = current_space - 5
-				direction == "up"
-		elif current_piece == 3:
+				direction = "up"
+		elif piece == 3:
 			if 16 <= current_space <= 19:
 				next_space = 66
 			else:
@@ -255,31 +263,34 @@ def nextSpace(tile):
 				direction = "down"
 
 	elif direction == "left":
-		if current_piece == 1:
-			if current_space == 0 or 5 or 10 or 15:
+		if piece == 1:
+			if current_space == (0 or 5 or 10 or 15):
 				next_space = 66
 			else:
 				next_space = current_space - 1
-		elif current_piece == 2:
+		elif piece == 2:
 			next_space = current_space + 5
 			if next_space >= 20:
 				next_space = 66
 			else:
-				direction == "down"
-		elif current_piece == 3:
+				direction = "down"
+		elif piece == 3:
 			next_space = current_space - 5
 			if next_space <= -1:
 				next_space = 66
-			direction == "up"
+			direction = "up"
 
 	else:
 		print "+++?????+++ Out of Cheese Error. Redo From Start"
+		sys.exit()
 
 	return next_space
 	
 
 def scanBoard():
 	global board_spaces
+	limbL.move_to_joint_positions(coords.ResetPos)
+	limbL.move_to_joint_positions(coords.left_back)
 	limbR.move_to_joint_positions(coords.ortho_view)
 	board = right_image
 	thresh, bd = cv2.threshold(board, 127,255,cv2.THRESH_BINARY)
@@ -287,21 +298,24 @@ def scanBoard():
 		if board_spaces[i].piece == 0:
 			bs = board_spaces[i]
 			space = bd[bs.y1:bs.y2, bs.x1:bs.x2]
-			if np.mean(space) >= 0.2:
+			if np.mean(space) >= 0.4:
 				limbR.move_to_joint_positions(coords.tuck_right)
 				move_to(bs)
 				bs.piece = IDBlock(left_image)
+				move_from(bs)
 				break
 	limbR.move_to_joint_positions(coords.tuck_right)
 
 def turnOne():
+	global direction 
 	gripper.calibrate()
 	limbR.move_to_joint_positions(coords.tuck_right)
 	limbL.move_to_joint_positions(coords.ResetPos)
 	startTurn()
 	pickUp()
 	place(17)
-	next_space = 12
+	direction = "up"
+	#next_space = 12
 
 def IDBlock(img):
 	cv2.imwrite('imgbase.jpg',img)
@@ -344,69 +358,76 @@ def IDBlock(img):
 while left_image==None:
 	pass
 
+
 turnOne()
 
 while gameLoss == False:
 	startTurn()
-	current_space = next_space
 	while board_spaces[current_space].piece != 0:
 		current_space = nextSpace(board_spaces[current_space].piece)
+
 	pickUp()
+	print "State: ", current_piece, " ", direction, " ", current_space
 	if current_piece == 1:
-		place(board_spaces[current_space])
+		place(current_space)
 		next = nextSpace(current_piece)
-		if next == 66
+		if next == 66:
 			gameLoss = True
 	elif current_piece == 2:
+		print "State: ", current_piece, " ", direction, " ", current_space
 		next = nextSpace(current_piece)
 		altnext = nextSpace(3)
-		if current_space == 6 or 7 or 8 or 11 or 12 or 13:
-			if next == 6 or 7 or 8 or 11 or 12 or 13:
-				place(board_spaces[current_space])
-			elif altnext == 6 or 7 or 8 or 11 or 12 or 13:
+		print "next: ", next, " , ", altnext
+		if current_space == (6 or 7 or 8 or 11 or 12 or 13):
+			if next == (6 or 7 or 8 or 11 or 12 or 13):
+				place(current_space)
+			elif altnext == (6 or 7 or 8 or 11 or 12 or 13):
 				rotate()
-				place(board_spaces[current_space])
+				place(current_space)
 
 		if next == 66:
 			if altnext == 66:
+				place(current_space)
 				gameLoss = True
 			else:			
 				rotate()
-				place(board_spaces[current_space])
-		elif next == 6 or 7 or 8 or 11 or 12 or 13:
-			place(board_spaces[current_space])
-		elif altnext == 6 or 7 or 8 or 11 or 12 or 13:
+				place(current_space)
+		elif next == (6 or 7 or 8 or 11 or 12 or 13):
+			place(current_space)
+		elif altnext == (6 or 7 or 8 or 11 or 12 or 13):
 			rotate()
-			place(board_spaces[current_space])
+			place(current_space)
 		else:
-			place(board_spaces[current_space])
+			place(current_space)
 
 	elif current_piece == 3:
 		next = nextSpace(current_piece)
 		altnext = nextSpace(2)
-		if current_space == 6 or 7 or 8 or 11 or 12 or 13:
-			if next == 6 or 7 or 8 or 11 or 12 or 13:
-				place(board_spaces[current_space])
-			elif altnext == 6 or 7 or 8 or 11 or 12 or 13:
+		print "next: ", next, " , ", altnext
+		if current_space == (6 or 7 or 8 or 11 or 12 or 13):
+			if next == (6 or 7 or 8 or 11 or 12 or 13):
+				place(current_space)
+			elif altnext == (6 or 7 or 8 or 11 or 12 or 13):
 				rotate()
-				place(board_spaces[current_space])
+				place(current_space)
 
 		if next == 66:
 			if altnext == 66:
+				place(current_space)
 				gameLoss = True
 			else:			
 				rotate()
-				place(board_spaces[current_space])
-		elif next == 6 or 7 or 8 or 11 or 12 or 13:
-			place(board_spaces[current_space])
-		elif altnext == 6 or 7 or 8 or 11 or 12 or 13:
+				place(current_space)
+		elif next == (6 or 7 or 8 or 11 or 12 or 13):
+			place(current_space)
+		elif altnext == (6 or 7 or 8 or 11 or 12 or 13):
 			rotate()
-			place(board_spaces[current_space])
+			place(current_space)
 		else:
-			place(board_spaces[current_space])
+			place(current_space)
 
 if gameLoss == True:
-	print "+++Divide By Cucumber Error. Please Reinstall Universe And Reboot+++
+	print "+++Divide By Cucumber Error. Please Reinstall Universe And Reboot+++"
 	sys.exit()
 
 		
