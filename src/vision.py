@@ -1,3 +1,10 @@
+#vision.py
+#Full code for the Final Year Project:
+#"Tabletop Robotics: Board Games With a Baxter Robot"
+# by Pascal Alexander Siddons, sc12pas@leeds.ac.uk
+
+
+#----------------Importing required libraries-------------------------------#
 import numpy as np
 import rospy
 import cv2
@@ -7,7 +14,7 @@ import sys
 import baxter_interface as bax
 from select import select
 
-import coords
+import coords #The file containing all of the necessary joint angles
 
 from sensor_msgs.msg import Image
 
@@ -16,11 +23,13 @@ rospy.init_node('Game_run')
 #-----------------Defining object classes-----------------------------------#
 
 class Point:
+	"""A class to describe objects representing points in 2D coordinate systems"""
 	def __init__(self):
 		self.x = 0
 		self.y = 0
 
 class BoardSpace:
+	"""A class to describe objects representing the 20 spaces on the game board"""
 	def __init__(self,posU,posD,piece,x1,y1,x2,y2):
 		self.posU = posU
 		self.posD = posD
@@ -30,7 +39,8 @@ class BoardSpace:
 		self.x2 = x2
 		self.y2 = y2
 
-
+#---------------Defining global variables and the parameters for the robots arms,-#
+#------------------------Gripper and cameras.-------------------------------------#
 
 limbR = bax.Limb('right')
 limbL = bax.Limb('left')
@@ -65,9 +75,13 @@ v3=174
 v4=250
 v5=315
 
+
+#The first two parameters correspond to the joint angles required to 
+#navigate to that particular space
 A1 = BoardSpace(coords.A1U, coords.A1D, 0, h1,v1,h2,v2)
 board_spaces.append(A1)
-
+#The third is the piece currently occupying that space
+#While the last four describe the area this space occupies in the orthogonal view
 A2 = BoardSpace(coords.A2U, coords.A2D, 0, h2,v1,h3,v2)
 board_spaces.append(A2)
 
@@ -125,7 +139,7 @@ board_spaces.append(D4)
 D5 = BoardSpace(coords.D5U, coords.D5D, 0, h5,v4,h6,v5)
 board_spaces.append(D5)
 
-#---------------------------Code to retrieve images from Lucas-----------------#
+#---------------------------Code to retrieve images from Lucas------------------#
 
 def get_right(msg):
 	global right_image
@@ -143,6 +157,7 @@ right_sub = rospy.Subscriber( 'cameras/right_hand_camera/image', Image, get_righ
 
 
 def place(num):
+	"""A function to instruct Lucas to place a block in a particular space"""
 	global current_piece
 	global current_space
 	global board_spaces
@@ -157,6 +172,8 @@ def place(num):
 	limbL.move_to_joint_positions(coords.ResetPos)
 
 def startTurn():
+	"""A function instructing Lucas to wait for the start of its turn before
+	scanning the board to see where the Human has placed their tile"""
 	global current_piece
 	current_piece = 0
 	limbL.move_to_joint_positions(coords.ResetPos)
@@ -167,7 +184,7 @@ def startTurn():
 		current_piece = IDBlock(left_image)
 		rospy.sleep(5)
 		i+=1		
-		if i >= 6:
+		if i >= 6:#After 30 seconds of inaction by the human player, Lucas assumes victory
 			print "Huzzah! Another glorious victory for your robotic overlord!"
 			sys.exit()
 	limbL.move_to_joint_positions(coords.PickU)
@@ -175,18 +192,17 @@ def startTurn():
 	scanBoard()
 	limbL.move_to_joint_positions(coords.ResetPos)
 
-def move_to(bs):
+def move_to(bs): #A function instructing Lucas to move the left arm to a particular space
 	limbL.move_to_joint_positions(coords.ResetPos)
 	limbL.move_to_joint_positions(bs.posU)
 	limbL.move_to_joint_positions(bs.posD)
 
-def move_from(bs):
+def move_from(bs): #A function instructing Lucas to move back from a particular space
 	limbL.move_to_joint_positions(bs.posU)
 	limbL.move_to_joint_positions(coords.ResetPos)
 
 
-def pickUp():
-	#limbL.move_to_joint_positions(coords.ResetPos)
+def pickUp(): #A Function instructing Lucas to pick up its tile for the turn
 	limbL.move_to_joint_positions(coords.PickU)
 	limbL.move_to_joint_positions(coords.PickD)
 	current_piece = IDBlock(left_image)
@@ -195,17 +211,18 @@ def pickUp():
 	limbL.move_to_joint_positions(coords.PickU)
 	limbL.move_to_joint_positions(coords.ResetPos)
 
-def rotate():
+def rotate(): # A function instructing Lucas to rotate its piece for the turn by 90 degrees
 	limbL.move_to_joint_positions(coords.PickU)
 	limbL.move_to_joint_positions(coords.rotateU)
 	limbL.move_to_joint_positions(coords.rotateD)
 	gripper.open()
-	current_piece = IDBlock(left_image)
 	rospy.sleep(2)
 	limbL.move_to_joint_positions(coords.rotateU)
 	pickUp()
 
 def nextSpace(piece):
+	"""A function calculating, given the current piece and with knowledge of the current space
+	and direction, what the space Lucas will be placing a piece in in its next turn will be"""
 	global current_space
 	global current_piece
 	global next_space
@@ -282,12 +299,15 @@ def nextSpace(piece):
 	if next_space <= -1:
 		next_space = 66
 	elif next_space >= 20:
-		next_space = 66
+		next_space = 66 
+	#Defining next_space as 66 tells Lucas the next space is off of the board and that it has lost
 	return next_space
 
 	
 
 def changeDirection():
+	"""A function instructing Lucas to update the direction it is moving around the board in
+	given the type of piece it has just placed"""
 	global current_space
 	global current_piece
 	global next_space
@@ -319,6 +339,9 @@ def changeDirection():
 			direction = "down"
 
 def scanBoard():
+	"""A function which scans all of the empty spaces on the board to
+	see if any have changed. The one which is most likely to have changed is then
+	scanned by Lucas"""
 	global board_spaces
 	limbL.move_to_joint_positions(coords.ResetPos)
 	limbL.move_to_joint_positions(coords.left_back)
@@ -346,7 +369,7 @@ def scanBoard():
 		move_from(bs)
 	limbR.move_to_joint_positions(coords.tuck_right)
 
-def turnOne():
+def turnOne():# A function instructing Lucas with what to do on its first turn.
 	global direction
 	global next_space
 	gripper.calibrate()
@@ -358,7 +381,7 @@ def turnOne():
 	direction = "up"
 	next_space = 12
 
-def IDBlock(img):
+def IDBlock(img):# A function to Identify the type of a block
 	img = img[0:300, 160:520]
 	thresh, im = cv2.threshold(img, 127,255,cv2.THRESH_BINARY)
 	imgray = cv2.cvtColor(im,cv2.COLOR_BGR2GRAY)
@@ -393,6 +416,7 @@ def IDBlock(img):
 	return tile_type
 
 def boardStatePrint():
+	#This just prints out a nice little display of Lucas' current perspective of the board state into the console
 	print "    1   2   3   4   5 "
 	print "A","|",board_spaces[0].piece,"|",board_spaces[1].piece,"|",board_spaces[2].piece,"|",board_spaces[3].piece,"|",board_spaces[4].piece,"|"
 	print "B","|",board_spaces[5].piece,"|",board_spaces[6].piece,"|",board_spaces[7].piece,"|",board_spaces[8].piece,"|",board_spaces[9].piece,"|"
@@ -404,10 +428,12 @@ def boardStatePrint():
 while left_image==None:
 	pass
 
+	
+#-------------Calling turnOne() and the main game loop--------------------------------------#
 
-turnOne()
+turnOne() #Start the game!
 
-while gameLoss == False:
+while gameLoss == False: # The main game loop, where the action happens and it all comes together.
 	startTurn()
 	print "State: ", current_piece, " ", direction, " ", current_space, board_spaces[current_space].piece
 	current_space = next_space
@@ -479,9 +505,3 @@ while gameLoss == False:
 if gameLoss == True:
 	print "+++Divide By Cucumber Error. Please Reinstall Universe And Reboot+++"
 	sys.exit()
-
-		
-		 
-
-
-
