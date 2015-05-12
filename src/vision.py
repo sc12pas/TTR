@@ -378,7 +378,7 @@ def turnOne():# A function instructing Lucas with what to do on its first turn.
 	limbL.move_to_joint_positions(coords.ResetPos)
 	startTurn()
 	pickUp()
-	if board_spaces[17].[piece] ==0:
+	if board_spaces[17].piece ==0:
 		place(17)
 		direction = "up"
 		next_space = 12
