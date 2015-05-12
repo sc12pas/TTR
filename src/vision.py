@@ -370,6 +370,7 @@ def scanBoard():
 	limbR.move_to_joint_positions(coords.tuck_right)
 
 def turnOne():# A function instructing Lucas with what to do on its first turn.
+	global board_spaces
 	global direction
 	global next_space
 	gripper.calibrate()
@@ -377,9 +378,14 @@ def turnOne():# A function instructing Lucas with what to do on its first turn.
 	limbL.move_to_joint_positions(coords.ResetPos)
 	startTurn()
 	pickUp()
-	place(17)
-	direction = "up"
-	next_space = 12
+	if board_spaces[17].[piece] ==0:
+		place(17)
+		direction = "up"
+		next_space = 12
+	else:
+		place(2)
+		direction = "down"
+		next_space = 7
 
 def IDBlock(img):# A function to Identify the type of a block
 	img = img[0:300, 160:520]
